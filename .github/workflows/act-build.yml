@@ -38,7 +38,7 @@ jobs:
           TOOL: ${{ matrix.tool }}
         run: |
           echo "deb [trusted=yes] http://ppa.launchpad.net/far2l-team/tools/ubuntu bionic main" | sudo tee /etc/apt/sources.list.d/tools.list
-          sudo apt update -qq && sudo apt install -y dos2unix quilt uasm
+          sudo apt update -qq && sudo apt install -y dos2unix quilt uasm upx
           TAG=$(gh api repos/$REPO/releases/latest --jq '.tag_name')
           echo "TAG:["$TAG"]"
           mkdir -p $HOME/x-tools
