@@ -119,7 +119,7 @@ jobs:
 
       - name: Get release version
         env:
-          REPO: 'gfunkmonk/7-Zip-zstd'
+          REPO: 'mcmilk/7-Zip-zstd'
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "VERSION=$(gh api repos/$REPO/releases/latest --jq '.tag_name')" >> $GITHUB_ENV
