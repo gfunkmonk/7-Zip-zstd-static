@@ -1,0 +1,162 @@
+name: build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: ${{ matrix.arch }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            tool: aarch64-unknown-linux-musl
+          - arch: arm
+            tool: arm-unknown-linux-musleabi
+          - arch: armhf
+            tool: arm-unknown-linux-musleabihf
+          - arch: loong64
+            tool: loongarch64-unknown-linux-musl
+          - arch: m68k
+            tool: m68k-unknown-linux-musl
+          - arch: mips64el
+            tool: mips64el-unknown-linux-musl
+          - arch: mips64
+            tool: mips64-unknown-linux-musl
+          - arch: mipsel
+            tool: mipsel-unknown-linux-musl
+          - arch: mipselsf
+            tool: mipsel-unknown-linux-muslsf
+          - arch: mips
+            tool: mips-unknown-linux-musl
+          - arch: mipssf
+            tool: mips-unknown-linux-muslsf
+          - arch: powerpc64
+            tool: powerpc64-unknown-linux-musl
+          - arch: powerpc
+            tool: powerpc-unknown-linux-musl
+          - arch: riscv
+            tool: riscv32-unknown-linux-musl
+          - arch: riscv64
+            tool: riscv64-unknown-linux-musl
+          - arch: s390x
+            tool: s390x-ibm-linux-musl
+          - arch: sh
+            tool: sh-multilib-linux-musl
+          - arch: x86
+            tool: x86_64-multilib-linux-musl
+          - arch: x86-64
+            tool: x86_64-multilib-linux-musl
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Checkout 7-Zip sources
+        uses: actions/checkout@v4
+        with:
+          repository: 'gfunkmonk/7zip-zstd'
+          path: 7zip
+
+      - name: Set up build tools
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: 'musl-cross/musl-cross'
+          TOOL: ${{ matrix.tool }}
+        run: |
+          echo "deb [trusted=yes] http://ppa.launchpad.net/far2l-team/tools/ubuntu bionic main" | sudo tee /etc/apt/sources.list.d/tools.list
+          sudo apt update -qq && sudo apt install -y dos2unix quilt uasm
+
+          TAG=$(gh api repos/$REPO/releases/latest --jq '.tag_name')
+          mkdir -p $HOME/x-tools
+          wget -qO- https://github.com/$REPO/releases/download/$TAG/$TOOL.tgz | tar -C $HOME/x-tools -xz || exit 1
+          [ -d "$HOME/x-tools/$TOOL/bin" ] && echo "$HOME/x-tools/$TOOL/bin" >> $GITHUB_PATH
+
+      - name: Build 7-Zip [${{ matrix.arch }}]
+        id: build
+        env:
+          ARCH: ${{ matrix.arch }}
+          TOOL: ${{ matrix.tool }}
+        working-directory: 7zip
+        run: |
+          bash ../build_7zip.sh
+
+      - name: Upload artifacts
+        if: steps.build.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: 7zz-${{ matrix.arch }}
+          path: ./**/7zz-*.tar*
+
+  build-macos:
+    name: macos-${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86-64
+            runner: macos-15-intel
+          - arch: arm64
+            runner: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Checkout 7-Zip sources
+        uses: actions/checkout@v4
+        with:
+          repository: 'ip7z/7zip'
+          path: 7zip
+
+      - name: Set up build tools
+        run: |
+          brew install dos2unix quilt
+
+      - name: Build 7-Zip [macos-${{ matrix.arch }}]
+        id: build
+        env:
+          ARCH: ${{ matrix.arch }}
+          PLATFORM: macOS
+        working-directory: 7zip
+        run: |
+          bash ../build_7zip.sh
+
+      - name: Upload artifacts
+        if: steps.build.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: 7zz-macos-${{ matrix.arch }}
+          path: ./**/7zz-*.tar*
+
+  release:
+    needs: [build, build-macos]
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Get release version
+        env:
+          REPO: 'ip7z/7zip'
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "VERSION=$(gh api repos/$REPO/releases/latest --jq '.tag_name')" >> $GITHUB_ENV
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          fail_on_unmatched_files: true
+          prerelease: false
+          tag_name: ${{ env.VERSION }}
+          name: ${{ env.VERSION }}
+          overwrite_files: true
+          body: |
+            ### 7-Zip ${{ env.VERSION }}
+          files: |
+            ./**/7zz-*.tar*
