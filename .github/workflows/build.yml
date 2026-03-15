@@ -56,7 +56,7 @@ jobs:
       - name: Checkout 7-Zip sources
         uses: actions/checkout@v4
         with:
-          repository: 'gfunkmonk/7zip-zstd'
+          repository: 'gfunkmonk/7-Zip-zstd'
           path: 7zip
 
       - name: Set up build tools
@@ -109,7 +109,7 @@ jobs:
       - name: Checkout 7-Zip sources
         uses: actions/checkout@v4
         with:
-          repository: 'ip7z/7zip'
+          repository: 'gfunkmonk/7-Zip-zstd'
           path: 7zip
 
       - name: Set up build tools
@@ -143,7 +143,7 @@ jobs:
 
       - name: Get release version
         env:
-          REPO: 'ip7z/7zip'
+          REPO: 'gfunkmonk/7-Zip-zstd'
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "VERSION=$(gh api repos/$REPO/releases/latest --jq '.tag_name')" >> $GITHUB_ENV
