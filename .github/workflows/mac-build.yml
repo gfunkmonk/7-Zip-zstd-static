@@ -1,0 +1,65 @@
+name: mac-build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: macos-${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86-64
+            runner: macos-15-intel
+          - arch: arm64
+            runner: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Checkout 7-Zip sources
+        uses: actions/checkout@v4
+        with:
+          repository: 'gfunkmonk/7-Zip-zstd'
+          path: 7zip
+
+      - name: Set up build tools
+        run: |
+          brew install dos2unix quilt
+
+      - name: Build 7-Zip [macos-${{ matrix.arch }}]
+        id: build
+        env:
+          ARCH: ${{ matrix.arch }}
+          PLATFORM: macOS
+        working-directory: 7zip
+        run: |
+          bash ../build_7zip.sh
+
+      - name: Upload artifacts
+        if: steps.build.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: 7zz-macos-${{ matrix.arch }}
+          path: ./**/7zz-*.tar*
+
+  macos-universal:
+    needs:
+      - build
+    runs-on: macos-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+      - name: make executable
+        run: chmod +x artifacts/*/* && ls -al && ls -al artifacts/
+      - name: run lipo to create universal binary
+        run: lipo -create -arch arm64 artifacts/7zz-macos-aarch64/7zz-macos-aarch64 -arch x86_64 artifacts/7zz-macos-x86_64/7zz-macos-x86_64 -output 7zz-macos-universal
+      - uses: actions/upload-artifact@v7
+        with:
+          name: 7zz-macos-universal
+          path: 7zz-macos-universal

@@ -43,12 +43,12 @@ jobs:
             tool: riscv64-unknown-linux-musl
           - arch: s390x
             tool: s390x-ibm-linux-musl
-          - arch: sh
-            tool: sh-multilib-linux-musl
+          - arch: sh4
+            tool: sh4-multilib-linux-musl
           - arch: x86
-            tool: x86_64-multilib-linux-musl
+            tool: i686-unknown-linux-musl
           - arch: x86-64
-            tool: x86_64-multilib-linux-musl
+            tool: x86_64-unknown-linux-musl
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -66,11 +66,15 @@ jobs:
           TOOL: ${{ matrix.tool }}
         run: |
           echo "deb [trusted=yes] http://ppa.launchpad.net/far2l-team/tools/ubuntu bionic main" | sudo tee /etc/apt/sources.list.d/tools.list
-          sudo apt update -qq && sudo apt install -y dos2unix quilt uasm upx-ucl
-
+          sudo apt update -qq && sudo apt install -y dos2unix quilt uasm
           TAG=$(gh api repos/$REPO/releases/latest --jq '.tag_name')
+          echo "TAG:["$TAG"]"
           mkdir -p $HOME/x-tools
-          wget -qO- https://github.com/$REPO/releases/download/$TAG/$TOOL.tgz | tar -C $HOME/x-tools -xz || exit 1
+          echo "tools:[" "https://github.com/$REPO/releases/download/$TAG/$TOOL" "]"
+          pushd $HOME/x-tools
+          wget https://github.com/$REPO/releases/download/$TAG/$TOOL.tar.xz
+          tar xvf $TOOL.tar.xz
+          popd
           [ -d "$HOME/x-tools/$TOOL/bin" ] && echo "$HOME/x-tools/$TOOL/bin" >> $GITHUB_PATH
 
       - name: Build 7-Zip [${{ matrix.arch }}]
