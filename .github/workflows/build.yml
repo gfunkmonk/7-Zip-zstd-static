@@ -148,6 +148,13 @@ jobs:
         run: |
           echo "VERSION=$(gh api repos/$REPO/releases/latest --jq '.tag_name')" >> $GITHUB_ENV
 
+      - name: Delete Previous Release
+        run: |
+          gh release delete "${{ env.VERSION }}" --repo "${GITHUB_REPOSITORY}" --cleanup-tag -y || echo "No release to delete"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+        
       - name: Upload release assets
         uses: softprops/action-gh-release@v2
         with:
