@@ -44,5 +44,6 @@ git ls-files -z | xargs -0 unix2dos -q --allow-chown && ( QUILT_PATCHES=../patch
 find . -type f -name '7zzs' -exec cp -va {} 7zz \;
 [ -f 7zz ] || find . -mindepth 2 -type f -name '7zz' | head -n 1 | xargs -I{} cp -va {} 7zz
 [ -f 7zz ] || { echo "Error: 7zzs or 7zz binary not found after build" >&2; exit 1; }
+if command -v upx >/dev/null 2>&1; then upx --lzma 7zz || true; fi
 if command -v file >/dev/null 2>&1; then echo -e "\033[38;2;223;115;255m File Info:  $(file 7zz | cut -d: -f2-)\033[0m"; fi
 tar -cJvf "$GITHUB_WORKSPACE/7zz-$PLATFORM-$ARCH.tar.xz" 7zz

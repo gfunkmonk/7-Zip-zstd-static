@@ -23,12 +23,12 @@ jobs:
             tool: x86_64-unknown-linux-musl
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Checkout 7-Zip sources
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
-          repository: 'gfunkmonk/7zip-zstd'
+          repository: 'mcmilk/7-Zip-zstd'
           path: 7zip
 
       - name: Set up build tools
@@ -38,7 +38,7 @@ jobs:
           TOOL: ${{ matrix.tool }}
         run: |
           echo "deb [trusted=yes] http://ppa.launchpad.net/far2l-team/tools/ubuntu bionic main" | sudo tee /etc/apt/sources.list.d/tools.list
-          sudo apt update -qq && sudo apt install -y dos2unix quilt uasm
+          sudo apt update -qq && sudo apt install -y dos2unix quilt uasm upx-ucl
           TAG=$(gh api repos/$REPO/releases/latest --jq '.tag_name')
           echo "TAG:["$TAG"]"
           mkdir -p $HOME/x-tools
@@ -60,7 +60,7 @@ jobs:
 
       - name: Upload artifacts
         if: steps.build.outcome == 'success'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: 7zz-${{ matrix.arch }}
           path: ./**/7zz-*.tar*
@@ -80,12 +80,12 @@ jobs:
             runner: macos-15
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Checkout 7-Zip sources
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
-          repository: 'ip7z/7zip'
+          repository: 'mcmilk/7-Zip-zstd'
           path: 7zip
 
       - name: Set up build tools
@@ -103,26 +103,55 @@ jobs:
 
       - name: Upload artifacts
         if: steps.build.outcome == 'success'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: 7zz-macos-${{ matrix.arch }}
           path: ./**/7zz-*.tar*
 
+  macos-universal:
+    needs:
+      - build-macos
+    runs-on: macos-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+      - name: Extract binaries
+        run: |
+          tar -xJf artifacts/7zz-macos-arm64/*.tar.xz -C artifacts/7zz-macos-arm64/
+          tar -xJf artifacts/7zz-macos-x86-64/*.tar.xz -C artifacts/7zz-macos-x86-64/
+      - name: run lipo to create universal binary
+        run: lipo -create -arch arm64 artifacts/7zz-macos-arm64/7zz -arch x86_64 artifacts/7zz-macos-x86-64/7zz -output 7zz
+      - name: tar xz binary
+        run: |
+          tar -cJvf 7zz-macOS-Universal.tar.xz 7zz
+      - uses: actions/upload-artifact@v7
+        with:
+          name: 7zz-macOS-Universal
+          path: 7zz-macOS-Universal.tar.xz
+
   release:
-    needs: [build, build-macos]
+    needs: [build, build-macos, macos-universal]
     permissions:
       contents: write
     runs-on: ubuntu-latest
     steps:
       - name: Download artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
 
       - name: Get release version
         env:
-          REPO: 'ip7z/7zip'
+          REPO: 'mcmilk/7-Zip-zstd'
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "VERSION=$(gh api repos/$REPO/releases/latest --jq '.tag_name')" >> $GITHUB_ENV
+
+      - name: Delete Previous Release
+        run: |
+          gh release delete "${{ env.VERSION }}" --repo "${GITHUB_REPOSITORY}" --cleanup-tag -y || echo "No release to delete"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
 
       - name: Upload release assets
         uses: softprops/action-gh-release@v2
