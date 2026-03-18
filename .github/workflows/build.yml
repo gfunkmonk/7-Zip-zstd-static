@@ -43,18 +43,18 @@ jobs:
             tool: riscv64-unknown-linux-musl
           - arch: s390x
             tool: s390x-ibm-linux-musl
-          - arch: sh
-            tool: sh-multilib-linux-musl
+          - arch: sh4
+            tool: sh4-multilib-linux-musl
           - arch: x86
-            tool: x86_64-multilib-linux-musl
+            tool: i686-unknown-linux-musl
           - arch: x86-64
-            tool: x86_64-multilib-linux-musl
+            tool: x86_64-unknown-linux-musl
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Checkout 7-Zip sources
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: 'gfunkmonk/7-Zip-zstd'
           path: 7zip
@@ -66,11 +66,15 @@ jobs:
           TOOL: ${{ matrix.tool }}
         run: |
           echo "deb [trusted=yes] http://ppa.launchpad.net/far2l-team/tools/ubuntu bionic main" | sudo tee /etc/apt/sources.list.d/tools.list
-          sudo apt update -qq && sudo apt install -y dos2unix quilt uasm upx-ucl
-
+          sudo apt update -qq && sudo apt install -y dos2unix quilt uasm
           TAG=$(gh api repos/$REPO/releases/latest --jq '.tag_name')
+          echo "TAG:["$TAG"]"
           mkdir -p $HOME/x-tools
-          wget -qO- https://github.com/$REPO/releases/download/$TAG/$TOOL.tgz | tar -C $HOME/x-tools -xz || exit 1
+          echo "tools:[" "https://github.com/$REPO/releases/download/$TAG/$TOOL" "]"
+          pushd $HOME/x-tools
+          wget https://github.com/$REPO/releases/download/$TAG/$TOOL.tar.xz
+          tar xvf $TOOL.tar.xz
+          popd
           [ -d "$HOME/x-tools/$TOOL/bin" ] && echo "$HOME/x-tools/$TOOL/bin" >> $GITHUB_PATH
 
       - name: Build 7-Zip [${{ matrix.arch }}]
@@ -84,7 +88,7 @@ jobs:
 
       - name: Upload artifacts
         if: steps.build.outcome == 'success'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: 7zz-${{ matrix.arch }}
           path: ./**/7zz-*.tar*
@@ -104,10 +108,10 @@ jobs:
             runner: macos-15
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Checkout 7-Zip sources
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: 'gfunkmonk/7-Zip-zstd'
           path: 7zip
@@ -127,19 +131,41 @@ jobs:
 
       - name: Upload artifacts
         if: steps.build.outcome == 'success'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: 7zz-macos-${{ matrix.arch }}
           path: ./**/7zz-*.tar*
 
+  macos-universal:
+    needs:
+      - build-macos
+    runs-on: macos-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+      - name: Extract binaries
+        run: |
+          tar -xJf artifacts/7zz-macos-arm64/*.tar.xz -C artifacts/7zz-macos-arm64/
+          tar -xJf artifacts/7zz-macos-x86-64/*.tar.xz -C artifacts/7zz-macos-x86-64/
+      - name: run lipo to create universal binary
+        run: lipo -create -arch arm64 artifacts/7zz-macos-arm64/7zz -arch x86_64 artifacts/7zz-macos-x86-64/7zz -output 7zz
+      - name: tar xz binary
+        run: |
+          tar -cJvf 7zz-macOS-Universal.tar.xz 7zz
+      - uses: actions/upload-artifact@v7
+        with:
+          name: 7zz-macOS-Universal
+          path: 7zz-macOS-Universal.tar.xz
+
   release:
-    needs: [build, build-macos]
+    needs: [build, build-macos, macos-universal]
     permissions:
       contents: write
     runs-on: ubuntu-latest
     steps:
       - name: Download artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
 
       - name: Get release version
         env:
@@ -148,6 +174,13 @@ jobs:
         run: |
           echo "VERSION=$(gh api repos/$REPO/releases/latest --jq '.tag_name')" >> $GITHUB_ENV
 
+      - name: Delete Previous Release
+        run: |
+          gh release delete "${{ env.VERSION }}" --repo "${GITHUB_REPOSITORY}" --cleanup-tag -y || echo "No release to delete"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+        
       - name: Upload release assets
         uses: softprops/action-gh-release@v2
         with:
