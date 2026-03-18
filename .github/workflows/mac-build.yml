@@ -14,10 +14,8 @@ jobs:
       matrix:
         include:
           - arch: x86-64
-            arch_label: x86_64
             runner: macos-15-intel
           - arch: arm64
-            arch_label: aarch64
             runner: macos-15
     steps:
       - name: Checkout
@@ -44,9 +42,9 @@ jobs:
 
       - name: Upload artifacts
         if: steps.build.outcome == 'success'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: 7zz-macos-${{ matrix.arch_label }}
+          name: 7zz-macos-${{ matrix.arch }}
           path: ./**/7zz-*.tar*
 
   macos-universal:
@@ -54,18 +52,16 @@ jobs:
       - build
     runs-on: macos-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
-      - name: List artifacts
-        run: ls -alR artifacts/
       - name: Extract binaries
         run: |
-          tar -xJf artifacts/7zz-macos-aarch64/*.tar.xz -C artifacts/7zz-macos-aarch64/
-          tar -xJf artifacts/7zz-macos-x86_64/*.tar.xz -C artifacts/7zz-macos-x86_64/
+          tar -xJf artifacts/7zz-macos-arm64/*.tar.xz -C artifacts/7zz-macos-arm64/
+          tar -xJf artifacts/7zz-macos-x86-64/*.tar.xz -C artifacts/7zz-macos-x86-64/
       - name: run lipo to create universal binary
-        run: lipo -create -arch arm64 artifacts/7zz-macos-aarch64/7zz -arch x86_64 artifacts/7zz-macos-x86_64/7zz -output 7zz-macos-universal
-      - uses: actions/upload-artifact@v4
+        run: lipo -create -arch arm64 artifacts/7zz-macos-arm64/7zz -arch x86_64 artifacts/7zz-macos-x86-64/7zz -output 7zz-macos-universal
+      - uses: actions/upload-artifact@v7
         with:
           name: 7zz-macos-universal
           path: 7zz-macos-universal
